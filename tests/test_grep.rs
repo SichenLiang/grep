@@ -252,14 +252,18 @@ fn quiet_match_overrides_file_error() {
     // With -q, a match makes grep exit 0 even if an earlier file could not be
     // opened. Without -q the missing file still yields exit 2, and -q with no
     // match keeps the error status.
-    // -q exits at the first match without draining stdin, so the harness's
-    // write can lose the race and fail with EPIPE; that error is expected here.
+    #[cfg(not(windows))]
+    let expected = "grep: no-such-file: No such file or directory\n";
+    #[cfg(windows)]
+    let expected = "grep: no-such-file: The system cannot find the file specified.\n";
     let (_s, mut c) = ucmd();
     c.args(&["-q", "abc", "no-such-file", "-"])
+        // -q may exit before the harness finishes writing stdin (EPIPE).
         .ignore_stdin_write_error()
         .pipe_in("abcd\n")
         .succeeds()
-        .no_output();
+        .no_stdout()
+        .stderr_is(expected);
 
     let (_s, mut c) = ucmd();
     c.args(&["abc", "no-such-file", "-"])
@@ -270,6 +274,55 @@ fn quiet_match_overrides_file_error() {
     c.args(&["-q", "zzz", "no-such-file", "-"])
         .pipe_in("abcd\n")
         .fails_with_code(2);
+}
+
+#[test]
+fn quiet_file_errors_and_no_messages() {
+    // -q keeps file diagnostics until a match; -s suppresses them.
+    #[cfg(not(windows))]
+    let missing_error = "grep: missing: No such file or directory\n";
+    #[cfg(windows)]
+    let missing_error = "grep: missing: The system cannot find the file specified.\n";
+
+    let (scene, mut c) = ucmd();
+    scene.fixtures.write("hit", "x\n");
+    scene.fixtures.write("miss", "y\n");
+
+    c.args(&["-q", "x", "missing", "hit"])
+        .succeeds()
+        .no_stdout()
+        .stderr_is(missing_error);
+
+    let mut c = scene.cmd(env!("CARGO_BIN_EXE_grep"));
+    c.args(&["-q", "x", "miss", "missing"])
+        .fails_with_code(2)
+        .no_stdout()
+        .stderr_is(missing_error);
+
+    let mut c = scene.cmd(env!("CARGO_BIN_EXE_grep"));
+    c.args(&["-q", "x", "hit", "missing"])
+        .succeeds()
+        .no_output();
+
+    let mut c = scene.cmd(env!("CARGO_BIN_EXE_grep"));
+    c.args(&["-s", "x", "missing"])
+        .fails_with_code(2)
+        .no_output();
+
+    let mut c = scene.cmd(env!("CARGO_BIN_EXE_grep"));
+    c.args(&["-qs", "x", "missing"])
+        .fails_with_code(2)
+        .no_output();
+
+    #[cfg(unix)]
+    {
+        let (scene, mut c) = ucmd();
+        scene.fixtures.mkdir("dir");
+        c.args(&["-q", "x", "dir"])
+            .fails_with_code(2)
+            .no_stdout()
+            .stderr_is("grep: dir: Is a directory\n");
+    }
 }
 
 #[test]
