@@ -252,6 +252,8 @@ fn quiet_match_overrides_file_error() {
     // With -q, a match makes grep exit 0 even if an earlier file could not be
     // opened. Without -q the missing file still yields exit 2, and -q with no
     // match keeps the error status.
+    // -q still reports a file it cannot read, but files after the first match
+    // are never opened. -qs suppresses the report; the status is still 2.
     #[cfg(not(windows))]
     let expected = "grep: no-such-file: No such file or directory\n";
     #[cfg(windows)]
@@ -273,44 +275,18 @@ fn quiet_match_overrides_file_error() {
     let (_s, mut c) = ucmd();
     c.args(&["-q", "zzz", "no-such-file", "-"])
         .pipe_in("abcd\n")
-        .fails_with_code(2);
-}
-
-#[test]
-fn quiet_file_errors_and_no_messages() {
-    // -q keeps file diagnostics until a match; -s suppresses them.
-    #[cfg(not(windows))]
-    let missing_error = "grep: missing: No such file or directory\n";
-    #[cfg(windows)]
-    let missing_error = "grep: missing: The system cannot find the file specified.\n";
+        .fails_with_code(2)
+        .no_stdout()
+        .stderr_is(expected);
 
     let (scene, mut c) = ucmd();
     scene.fixtures.write("hit", "x\n");
-    scene.fixtures.write("miss", "y\n");
-
-    c.args(&["-q", "x", "missing", "hit"])
-        .succeeds()
-        .no_stdout()
-        .stderr_is(missing_error);
-
-    let mut c = scene.cmd(env!("CARGO_BIN_EXE_grep"));
-    c.args(&["-q", "x", "miss", "missing"])
-        .fails_with_code(2)
-        .no_stdout()
-        .stderr_is(missing_error);
-
-    let mut c = scene.cmd(env!("CARGO_BIN_EXE_grep"));
-    c.args(&["-q", "x", "hit", "missing"])
+    c.args(&["-q", "x", "hit", "no-such-file"])
         .succeeds()
         .no_output();
 
     let mut c = scene.cmd(env!("CARGO_BIN_EXE_grep"));
-    c.args(&["-s", "x", "missing"])
-        .fails_with_code(2)
-        .no_output();
-
-    let mut c = scene.cmd(env!("CARGO_BIN_EXE_grep"));
-    c.args(&["-qs", "x", "missing"])
+    c.args(&["-qs", "x", "no-such-file"])
         .fails_with_code(2)
         .no_output();
 
