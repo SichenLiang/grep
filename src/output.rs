@@ -201,7 +201,7 @@ impl<'a> OutputWriter<'a> {
 
     /// Write an IO error to stderr.
     pub fn report_io_error(&self, label: &OsStr, err: &io::Error) {
-        if !self.config.no_messages && !self.config.quiet {
+        if !self.config.no_messages {
             // Strip the trailing " (os error XX)" so the message matches GNU grep.
             let _ = writeln!(
                 io::stderr(),
