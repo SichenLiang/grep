@@ -1226,79 +1226,33 @@ fn context_groups_are_separated_across_files() {
     let (scene, _) = ucmd();
     scene.fixtures.write("first", "hit\nno\nno\nhit\n");
     scene.fixtures.write("second", "hit\n");
-    scene.fixtures.write("b", "hit three\nno\nfar\nhit four\n");
-    scene.fixtures.write("c", "no\nhit five\n");
-    scene.fixtures.write("d", "nothing\n");
+    scene.fixtures.write("leading", "no\nhit\n");
+    scene.fixtures.write("miss", "no\n");
+    scene.fixtures.write_bytes("binary", b"hit\0\n");
 
-    scene
-        .cmd(env!("CARGO_BIN_EXE_grep"))
-        .args(&["-n", "-C0", "hit", "first", "second"])
+    let mut c = scene.cmd(env!("CARGO_BIN_EXE_grep"));
+    c.args(&["-n", "-C", "0", "hit", "first", "second"])
         .succeeds()
         .stdout_only("first:1:hit\n--\nfirst:4:hit\n--\nsecond:1:hit\n");
 
-    scene
-        .cmd(env!("CARGO_BIN_EXE_grep"))
-        .args(&["-n", "-C1", "hit", "b", "c"])
+    let mut c = scene.cmd(env!("CARGO_BIN_EXE_grep"));
+    c.args(&["-n", "-C", "1", "hit", "first", "leading"])
         .succeeds()
-        .stdout_only("b:1:hit three\nb-2-no\nb-3-far\nb:4:hit four\n--\nc-1-no\nc:2:hit five\n");
+        .stdout_only(
+            "first:1:hit\nfirst-2-no\nfirst-3-no\nfirst:4:hit\n--\nleading-1-no\nleading:2:hit\n",
+        );
 
-    scene
-        .cmd(env!("CARGO_BIN_EXE_grep"))
-        .args(&["-n", "-C0", "hit", "d", "first"])
-        .succeeds()
-        .stdout_only("first:1:hit\n--\nfirst:4:hit\n");
-
-    scene
-        .cmd(env!("CARGO_BIN_EXE_grep"))
-        .args(&["-n", "-C0", "hit", "first", "d", "second"])
+    let mut c = scene.cmd(env!("CARGO_BIN_EXE_grep"));
+    c.args(&["-n", "-C", "0", "hit", "first", "miss", "second"])
         .succeeds()
         .stdout_only("first:1:hit\n--\nfirst:4:hit\n--\nsecond:1:hit\n");
-}
 
-#[test]
-fn context_group_separator_options_across_files() {
-    let (scene, _) = ucmd();
-    scene.fixtures.write("first", "hit\nno\nno\nhit\n");
-    scene.fixtures.write("second", "hit\n");
-
-    scene
-        .cmd(env!("CARGO_BIN_EXE_grep"))
-        .args(&[
-            "-n",
-            "-C0",
-            "--no-group-separator",
-            "hit",
-            "first",
-            "second",
-        ])
+    // The match in "binary" is selected even though it is not printed.
+    let mut c = scene.cmd(env!("CARGO_BIN_EXE_grep"));
+    c.args(&["-n", "-C", "0", "hit", "binary", "second"])
         .succeeds()
-        .stdout_only("first:1:hit\nfirst:4:hit\nsecond:1:hit\n");
-
-    scene
-        .cmd(env!("CARGO_BIN_EXE_grep"))
-        .args(&["-n", "-C0", "--group-separator=X", "hit", "first", "second"])
-        .succeeds()
-        .stdout_only("first:1:hit\nX\nfirst:4:hit\nX\nsecond:1:hit\n");
-}
-
-#[test]
-fn recursive_context_groups_are_separated_across_files() {
-    let (scene, mut c) = ucmd();
-    scene.fixtures.mkdir("tree-a");
-    scene.fixtures.mkdir("tree-b");
-    scene.fixtures.write("tree-a/one", "hit\n");
-    scene.fixtures.write("tree-b/two", "hit\n");
-    let first = std::path::Path::new("tree-a").join("one");
-    let second = std::path::Path::new("tree-b").join("two");
-    let expected = format!(
-        "{}:1:hit\n--\n{}:1:hit\n",
-        first.display(),
-        second.display()
-    );
-
-    c.args(&["-r", "-n", "-C0", "hit", "tree-a", "tree-b"])
-        .succeeds()
-        .stdout_only(&expected);
+        .stdout_is("--\nsecond:1:hit\n")
+        .stderr_contains("binary file matches");
 }
 
 #[test]

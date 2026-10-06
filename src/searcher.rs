@@ -26,8 +26,9 @@ pub struct Searcher<'a> {
     any_match: bool,
     had_error: bool,
     binary_notice_enabled: bool,
-    /// Whether a context group was printed by any file in this search.
-    any_group_seen: bool,
+    /// Whether any file has selected a line so far, including matches in a
+    /// binary file that were not printed. Later context groups get a separator.
+    any_line_selected: bool,
 
     // Per-session state
     session_context_buf: ContextBuffer,
@@ -54,7 +55,7 @@ impl<'a> Searcher<'a> {
                 && !config.count
                 && !config.files_with_matches
                 && !config.files_without_match,
-            any_group_seen: false,
+            any_line_selected: false,
 
             session_context_buf: ContextBuffer::new(config.before_context),
             session_match_count: 0,
@@ -617,6 +618,7 @@ impl<'a> Searcher<'a> {
                 },
             )?;
         }
+        self.any_line_selected = true;
 
         self.session_after_remaining = self.config.after_context;
         Ok(true)
@@ -673,13 +675,10 @@ impl<'a> Searcher<'a> {
             .peek()
             .map_or(view.line_number, |ctx| ctx.line_number);
 
-        // Group separator between non-adjacent groups.
-        // `last_printed_line == 0` marks the first group in this file.
-        // Separate it only when a previous file has printed a group.
-        if self.config.has_context
-            && ((last_printed_line == 0 && self.any_group_seen)
-                || (last_printed_line > 0 && group_start_line > last_printed_line + 1))
-        {
+        // Separate this group from any earlier selected line, unless it
+        // directly follows the last printed line in the same file.
+        let follows_previous = last_printed_line > 0 && group_start_line == last_printed_line + 1;
+        if self.config.has_context && self.any_line_selected && !follows_previous {
             self.writer.write_group_separator()?;
         }
 
@@ -690,7 +689,6 @@ impl<'a> Searcher<'a> {
 
         self.writer.write_line(view, path)?;
         self.session_last_printed_line = view.line_number;
-        self.any_group_seen = true;
         Ok(())
     }
 
