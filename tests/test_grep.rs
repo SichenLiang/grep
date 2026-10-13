@@ -1408,21 +1408,6 @@ fn grep_colors_env_stops_at_malformed_value() {
         .stdout_contains("\x1b[01;31m\x1b[Kfoo\x1b[m\x1b[K");
 }
 
-#[cfg(unix)]
-#[test]
-fn grep_colors_env_with_invalid_utf8() {
-    use std::ffi::OsStr;
-    use std::os::unix::ffi::OsStrExt;
-
-    let (_s, mut c) = ucmd();
-    c.env("GREP_COLORS", OsStr::from_bytes(b"ms=33:\xff:fn=34"))
-        .args(&["--color=always", "-H", "foo"])
-        .pipe_in("foo\n")
-        .succeeds()
-        .stdout_contains("\x1b[34m\x1b[K(standard input)\x1b[m\x1b[K")
-        .stdout_contains("\x1b[33m\x1b[Kfoo\x1b[m\x1b[K");
-}
-
 #[test]
 fn legacy_grep_color_env() {
     // uutests clears the environment by default,

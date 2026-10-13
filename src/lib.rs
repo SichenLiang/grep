@@ -145,11 +145,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .ok()
         .filter(|value| is_color_value(value))
         .unwrap_or_default();
-    // Decode lossily to preserve valid entries; replacement characters cannot
-    // match capability names or pass color-value validation.
-    let grep_colors = std::env::var_os("GREP_COLORS")
-        .map(|colors| colors.to_string_lossy().into_owned())
-        .unwrap_or_default();
+    let grep_colors = std::env::var("GREP_COLORS").unwrap_or_default();
 
     let patterns_or_files: Vec<_> = matches
         .get_many::<OsString>("patterns_or_files")
